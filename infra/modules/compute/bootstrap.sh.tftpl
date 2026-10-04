@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+dnf install -y python3.12 python3.12-pip
+install -d -m 755 /opt/portfolio
+python3.12 -m venv /opt/portfolio/venv
+cat > /opt/portfolio/requirements.lock <<'DEPS_EOF'
+${runtime_lock}
+DEPS_EOF
+/opt/portfolio/venv/bin/pip install -r /opt/portfolio/requirements.lock
+curl --fail --silent --show-error --retry 3 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /opt/portfolio/rds-ca.pem
+cat > /opt/portfolio/server.py <<'APP_EOF'
+${app}
+APP_EOF
+useradd --system --no-create-home portfolio
+cat > /etc/systemd/system/portfolio.service <<'UNIT_EOF'
+[Unit]
+Description=Portfolio two-tier web service
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=portfolio
+WorkingDirectory=/opt/portfolio
+Environment=AWS_REGION=${region}
+Environment=DB_HOST=${db_host}
+Environment=DB_SECRET_ARN=${db_secret_arn}
+Environment=DB_CA_FILE=/opt/portfolio/rds-ca.pem
+ExecStart=/opt/portfolio/venv/bin/python /opt/portfolio/server.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+systemctl daemon-reload
+systemctl enable --now portfolio.service

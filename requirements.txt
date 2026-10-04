@@ -1,0 +1,4 @@
+boto3==1.42.76
+PyMySQL==1.1.2
+pytest==9.0.2
+requests==2.32.5
